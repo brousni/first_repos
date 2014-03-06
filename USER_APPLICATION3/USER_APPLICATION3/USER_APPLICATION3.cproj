@@ -605,10 +605,11 @@
     <GenerateMapFile>True</GenerateMapFile>
     <GenerateListFile>True</GenerateListFile>
     <GenerateEepFile>True</GenerateEepFile>
-    <UsesExternalMakeFile>False</UsesExternalMakeFile>
+    <UsesExternalMakeFile>True</UsesExternalMakeFile>
     <BuildTarget>all</BuildTarget>
     <CleanTarget>clean</CleanTarget>
-    <ExternalMakeFilePath>C:\workspace\USER_APPLICATION3\USER_APPLICATION3\ext_make\Makefile</ExternalMakeFilePath>
+    <ExternalMakeFilePath>C:\GitHub\first_repos\USER_APPLICATION3\USER_APPLICATION3\ext_make\Makefile</ExternalMakeFilePath>
+    <OutputDirectory>C:\GitHub\first_repos\USER_APPLICATION3\USER_APPLICATION3\ext_make</OutputDirectory>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="src\OWIBitFunctions.h">

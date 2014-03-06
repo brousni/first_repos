@@ -44,7 +44,7 @@ typedef struct
 	uint16_t		RunMin;					// 0
 } ME_Data_t;								// 44 bytes data
 
-ME_Data_t SMS_Value = {1,50,0,4,500000,0,0,0,0,0,0,0,0x03,5,30,0,0,0,31,23802,0,0,0,0};
+ME_Data_t SMS_Value = {1,50,0,4,500000,0,0,0,0,0,0,0,0x03,0,30,0,0,0,31,23802,0,0,0,0};
 
 typedef enum TaskEnumType
 {
@@ -111,8 +111,6 @@ static usart_serial_options_t uart0_options = {
 //General Variables
 long int		init_cnt = 0;
 long int		get_hz = 0;
-long int		tick_cnt = 0;
-long int		ubercnt = 0;
 long int		cnt1 = 0;
 long int		cnt2 = 0;
 long int		ADC_IN1 = 0;
@@ -120,12 +118,14 @@ long int		ADC_IN2 = 0;
 long int		ADC_IN3 = 0;
 long int		ADC_IN4 = 0;
 long int		VIN_ADC = 0;
+int				reset_flag = 0;
 int				cnt1_flag = 0;
 int				cnt2_flag = 0;
 uint8_t			init_chs = 0;
 int				init_flag = 0;
 long int		adc_cnt = 0;
 long int		adc_get_in = 0;
+char			datastr[1000] = "";
 
 uint_fast32_t	rs232= 0;
 uint_fast32_t	usartvar = 0;
@@ -142,14 +142,13 @@ int				smslen = 7;
 int				sms_flag = 0;
 int				GSM_init_flag = 0;
 int				GSM_wflag = 1;
-int				GSM_atcmd_flag = 0;
+int				GSM_atcmd_flag = 1;
 int				GSM_phnnmb_flag = 0;
 uint8_t			received_byte_GSM = 0;
 int				GSM_smslen_cnt = 0;
 uint_fast32_t	wptr_GSM = 0;
 uint_fast32_t	rptr_GSM = 0;
 char			instring_GSM[1000] = "";
-int				GSM_send_flag = 0;
 uint8_t			GSM_chs = 0;
 char			GSM_sms[160] = "";
 int				GSM_cstmsms_flag = 0;
@@ -163,15 +162,14 @@ int				GPS_status = 0;
 int				GPS_start_flag = 0;
 int				GPS_wflag = 0;
 int				GPS_fix_flag = 0;
+int				GPS_send_flag = 0;
 uint8_t			received_byte_GPS = 0;
 uint_fast32_t	wptr_GPS = 0;
 uint_fast32_t	rptr_GPS = 0;
 char			instring_GPS[1000] = "";
-int				GPS_send_flag = 0;
 long int		str_ndx_GPS = 0;
 uint8_t			GPS_chs = 0;
 //Latitude/longitude
-int				llflag = 0;
 int				llsepamnt1 = 2;
 int				llsepamnt2 = 1;
 int				oldllndx = 0;
@@ -181,12 +179,10 @@ char			llsgn1 = 71;
 char			llsgn2 = 71;
 char			llsgn3 = 65;
 char			llbuf[1000] = "";
-char			datastr[1000] = "";
 char			separator = 44;
 uint32_t		smslongitude = 0;
 uint32_t		smslatitude	= 0;
 //Time
-int				utcflag = 0;
 int				utcsepamnt1 = 1;
 int				utcsepamnt2 = 8;
 int				oldutcndx = 0;
@@ -197,19 +193,27 @@ char			utcsgn3 = 67;
 char			utcbuf[1000] = "";
 uint32_t		DDMM = 0;
 uint32_t		HHMMSS = 0;
+//Satellites
+int				satsepamnt1 = 1;
+int				oldsatndx = 0;
+char			sat_nmb = 0;
+char			satsgn1 = 71;
+char			satsgn2 = 83;
+char			satsgn3 = 86;
+char			satbuf[10] = "";
 
 //IO Variables
-long int			IO_cnt = 0;
-long int			out1_cnt = 0;
-uint8_t				IO_chs = 0;
-int					out1 = 0;
-uint8_t				IO_status = 0;
-long int			IO_VIN_CALC = 0;
+long int		IO_cnt = 0;
+long int		out1_cnt = 0;
+uint8_t			IO_chs = 0;
+int				out1 = 0;
+uint8_t			IO_status = 0;
+uint32_t		IO_VIN_CALC = 0;
 
 //1-WIRE
-long int			ow_cnt = 0;
-OWI_device			OWI_test_dev;
-static bool ConversionStarted = false;
+long int		ow_cnt = 0;
+OWI_device		OWI_test_dev;
+static bool		ConversionStarted = false;
 long int			Counter = 0;
 
 //RS232 Variables
@@ -287,7 +291,43 @@ void test_task(void* taskparam)
 					usart_serial_write_packet(UART0, "Press 1 to go to GPS Mode\n\r", strlen("Press 1 to go to GPS Mode\n\r"));
 					usart_serial_write_packet(UART0, "Press 2 to go to GSM Mode\n\r", strlen("Press 2 to go to GSM Mode\n\r"));
 					usart_serial_write_packet(UART0, "Press 3 to go to I/O Mode\n\r", strlen("Press 3 to go to I/O Mode\n\r"));
+					usart_serial_write_packet(UART_SERIAL0, "\n\rConfirm with Enter\n\r\n\r", strlen("\n\rConfirm with Enter\n\r\n\r"));
 					init_flag = 0;
+				}
+				if(reset_flag == 1)
+				{
+					// BATT OFF
+					pio_set_output(PIOD, PIO_PD19, LOW, DISABLE, DISABLE);
+					// MODEM OFF
+					pio_set_output(PIOB, PIO_PB14, LOW, DISABLE, DISABLE);
+					init_flag = 0;
+					GPS_wflag = 0;
+					cnt1_flag = 0;
+					cnt2_flag = 0;
+					sms_flag = 0;
+					GSM_init_flag = 0;
+					GSM_wflag = 1;
+					GSM_atcmd_flag = 1;
+					GSM_phnnmb_flag = 0;
+					GSM_reset_flag = 0;
+					send_cstm_sms_flag = 0;
+					GSM_seq_flag = 0;
+					GPS_start_flag = 0;
+					GPS_wflag = 0;
+					GPS_fix_flag = 0;
+					GPS_send_flag = 0;
+					adc_cnt = 0;
+					ow_cnt = 0;
+					GSM_tick_cnt = 0;
+					GPS_tick_cnt = 0;
+					cnt1 = 0;
+					cnt2 = 0;
+					IO_cnt = 0;
+					GPS_chs = 0;
+					GSM_chs = 0;
+					IO_chs = 0;
+					init_chs = 0;
+					reset_flag = 0;
 				}
 				if(instring_RS232[wptr_RS232-1] == 13)
 				{
@@ -369,58 +409,7 @@ void test_task(void* taskparam)
 					GSM_init_flag = 0;
 					init_flag = 1;
 				}
-				if(cnt2_flag == 1 || sms_flag == 1)
-				{
-					memcpy ( ( char * ) SmsStr, ( char * ) &SMS_Value, Prot_v1_Size );
-					UDP2SMS( ( uint8_t * )SmsStr, UnsStr, Prot_v1_Size );
-					strcpy ( SmsStr, "MTC BINRES ");
-					strcat ( SmsStr, UnsStr);
-					
-					SMS_Value.PosQ_No++;
-					{
-						if(SMS_Value.PosQ_No > 255)
-						{
-							SMS_Value.PosQ_No = 0;
-						}
-					}
-					usart_serial_write_packet(USART_SERIAL1, "AT+CMGS=\"", strlen("AT+CMGS=\""));
-					usart_serial_write_packet(USART_SERIAL1, SmsTel, 4);
-					usart_serial_write_packet(USART_SERIAL1, "\"\r", strlen("\"\r"));
-					vTaskDelay(100 / portTICK_RATE_MS);
-					usart_serial_write_packet(USART_SERIAL1, SmsStr, strlen(SmsStr));
-					vTaskDelay(250 / portTICK_RATE_MS);
-					usart_serial_write_packet(USART_SERIAL1, "\032", strlen("\032"));
-					vTaskDelay(2000);
-					smscnt++;
-					cnt2_flag = 0;
-					sms_flag = 0;
-					usart_serial_write_packet(UART0, "SMS sent to Gateway", strlen("SMS sent to Gateway"));
-					//xQueueSendToBack(GSM_case_Queue, &QueueItem, portMAX_DELAY);
-					//break;
-				}
-				if(send_cstm_sms_flag == 1)
-				{
-					usart_serial_write_packet(USART_SERIAL1, "AT+CMGS=\"", strlen("AT+CMGS=\""));
-					vTaskDelay(250 / portTICK_RATE_MS);
-					usart_serial_write_packet(USART_SERIAL1, phnnmb, 8);
-					vTaskDelay(250 / portTICK_RATE_MS);
-					usart_serial_write_packet(USART_SERIAL1, "\"\r", strlen("\"\r"));
-					vTaskDelay(250 / portTICK_RATE_MS);
-					usart_serial_write_packet(USART_SERIAL1, GSM_sms, GSM_smslen_cnt);
-					vTaskDelay(250 / portTICK_RATE_MS);
-					usart_serial_write_packet(USART_SERIAL1, "\032", strlen("\032"));
-					send_cstm_sms_flag = 0;
-					vTaskDelay(2000 / portTICK_RATE_MS);
-					usart_serial_write_packet(UART0, "\n\r", strlen("\n\r"));
-					usart_serial_write_packet(UART0, GSM_sms, GSM_smslen_cnt);
-					usart_serial_write_packet(UART0, " was sent to receiver\: ", strlen(" was sent to receiver\: "));
-					usart_serial_write_packet(UART0, phnnmb, 8);
-					usart_serial_write_packet(UART0, "\n\r", strlen("\n\r"));
-					
-					
-					//xQueueSendToBack(GSM_case_Queue, &QueueItem, portMAX_DELAY);
-					//break;
-				}
+				
 				
 				for(str_ndx_GPS = rptr_GPS; str_ndx_GPS != wptr_GPS; str_ndx_GPS++)
 				{
@@ -503,7 +492,49 @@ void test_task(void* taskparam)
 						bufndx = 0;
 						memset(datastr, 0, 1000);
 					}
-					
+					//Find Number of Satellites
+					if(instring_GPS[str_ndx_GPS] == satsgn1 && instring_GPS[str_ndx_GPS+1] == satsgn2 && instring_GPS[str_ndx_GPS+2] == satsgn3)
+					{
+						str_ndx_GPS++;
+						if(str_ndx_GPS > 999)
+						{
+							str_ndx_GPS = 0;
+						}
+						for(sepcnt = 0; sepcnt < satsepamnt1; str_ndx_GPS++)
+						{
+							if(str_ndx_GPS > 999)
+							{
+								str_ndx_GPS = 0;
+							}
+							if(instring_GPS[str_ndx_GPS] == separator)
+							{
+								sepcnt++;
+							}
+						}
+						if(sepcnt == satsepamnt1)
+						{
+							sepcnt = 0;
+							if(str_ndx_GPS > 999)
+							{
+								str_ndx_GPS = 0;
+							}
+							while(instring_GPS[str_ndx_GPS] != separator)
+							{
+								datastr[bufndx] = instring_GPS[str_ndx_GPS];
+								bufndx++;
+								str_ndx_GPS++;
+								if(str_ndx_GPS > 999)
+								{
+									str_ndx_GPS = 0;
+								}
+							}
+						}
+						memcpy(&sat_nmb, &datastr[0], 1);
+						memset(satbuf, 0, 10);
+						bufndx = 0;
+						memset(datastr, 0, 1000);
+						SMS_Value.SAT = (sat_nmb - 48);
+					}
 					// Find LL
 					if(instring_GPS[str_ndx_GPS] == llsgn1 && instring_GPS[str_ndx_GPS+1] == llsgn2 && instring_GPS[str_ndx_GPS+2] == llsgn3)
 					{
@@ -717,6 +748,56 @@ void test_task(void* taskparam)
 						break;
 					}
 				}
+				if(cnt2_flag == 1 || sms_flag == 1)
+				{
+					memcpy ( ( char * ) SmsStr, ( char * ) &SMS_Value, Prot_v1_Size );
+					UDP2SMS( ( uint8_t * )SmsStr, UnsStr, Prot_v1_Size );
+					strcpy ( SmsStr, "MTC BINRES ");
+					strcat ( SmsStr, UnsStr);
+					
+					SMS_Value.PosQ_No++;
+					{
+						if(SMS_Value.PosQ_No > 255)
+						{
+							SMS_Value.PosQ_No = 0;
+						}
+					}
+					usart_serial_write_packet(USART_SERIAL1, "AT+CMGS=\"", strlen("AT+CMGS=\""));
+					usart_serial_write_packet(USART_SERIAL1, SmsTel, 4);
+					usart_serial_write_packet(USART_SERIAL1, "\"\r", strlen("\"\r"));
+					vTaskDelay(100 / portTICK_RATE_MS);
+					usart_serial_write_packet(USART_SERIAL1, SmsStr, strlen(SmsStr));
+					vTaskDelay(250 / portTICK_RATE_MS);
+					usart_serial_write_packet(USART_SERIAL1, "\032", strlen("\032"));
+					vTaskDelay(2000);
+					smscnt++;
+					cnt2_flag = 0;
+					sms_flag = 0;
+					usart_serial_write_packet(UART0, "SMS sent to Gateway", strlen("SMS sent to Gateway"));
+					xQueueSendToBack(GSM_case_Queue, &QueueItem, portMAX_DELAY);
+					break;
+				}
+				if(send_cstm_sms_flag == 1)
+				{
+					usart_serial_write_packet(USART_SERIAL1, "AT+CMGS=\"", strlen("AT+CMGS=\""));
+					vTaskDelay(250 / portTICK_RATE_MS);
+					usart_serial_write_packet(USART_SERIAL1, phnnmb, 8);
+					vTaskDelay(250 / portTICK_RATE_MS);
+					usart_serial_write_packet(USART_SERIAL1, "\"\r", strlen("\"\r"));
+					vTaskDelay(250 / portTICK_RATE_MS);
+					usart_serial_write_packet(USART_SERIAL1, GSM_sms, GSM_smslen_cnt);
+					vTaskDelay(250 / portTICK_RATE_MS);
+					usart_serial_write_packet(USART_SERIAL1, "\032", strlen("\032"));
+					send_cstm_sms_flag = 0;
+					vTaskDelay(2000 / portTICK_RATE_MS);
+					usart_serial_write_packet(UART0, "\n\r", strlen("\n\r"));
+					usart_serial_write_packet(UART0, GSM_sms, GSM_smslen_cnt);
+					usart_serial_write_packet(UART0, " was sent to receiver\: ", strlen(" was sent to receiver\: "));
+					usart_serial_write_packet(UART0, phnnmb, 8);
+					usart_serial_write_packet(UART0, "\n\r", strlen("\n\r"));
+					xQueueSendToBack(GSM_case_Queue, &QueueItem, portMAX_DELAY);
+					break;
+				}
 			}
 			break;
 			
@@ -725,17 +806,40 @@ void test_task(void* taskparam)
 			usart_serial_write_packet(UART0, "\n\rGPS Mode:\n\r\n\r", strlen("\n\rGPS Mode:\n\r\n\r"));
 			usart_serial_write_packet(UART0, "Press 1 to Print Full NMEA. Press 1 again to stop\n\r", strlen("Press 1 to Print Full NMEA. Press 1 again to stop\n\r"));
 			usart_serial_write_packet(UART0, "Press 2 to go to GSM Mode\n\r", strlen("Press 2 to go to GSM Mode\n\r"));
+			usart_serial_write_packet(UART0, "Press 3 to go to I/O Mode\n\r", strlen("Press 3 to go to I/O Mode\n\r"));
+			usart_serial_write_packet(UART0, "Press 0 to Reset to Init/Status Mode\n\r", strlen("Press 0 to Reset to Init/Status Mode\n\r"));
+			usart_serial_write_packet(UART_SERIAL0, "\n\rConfirm with Enter\n\r\n\r", strlen("\n\rConfirm with Enter\n\r\n\r"));
 			GPS_chs = 0;
 			GPS_wflag = 0;
 			while(1)
 			{
+				if(!ioport_get_pin_level(PIO_PD23_IDX))
+				{
+					pio_set_output(PIOB, PIO_PB13, LOW, DISABLE, DISABLE);
+				}
+				// Hvis GPS status-ON er høj. Tænd grøn diode
+				if(ioport_get_pin_level(PIO_PD24_IDX) && GPS_start_flag == 0)
+				{
+					pio_set_output(PIOD, PIO_PD29, HIGH, DISABLE, DISABLE);
+					usart_serial_write_packet(UART0, "GPS On\n\r", strlen("GPS On\n\r"));
+					vTaskDelay(1000 / portTICK_RATE_MS);
+					GPS_start_flag = 1;
+				} // Sluk grøn diode hvis status-ON er lav
+				if(!ioport_get_pin_level(PIO_PD24_IDX) && GPS_start_flag == 1)
+				{
+					pio_set_output(PIOD, PIO_PD29, LOW, DISABLE, DISABLE);
+					GPS_start_flag = 0;
+					usart_serial_write_packet(UART0, "GPS Off\n\r", strlen("GPS Off\n\r"));
+				}
 				if(cnt2_flag == 1)
 				{
+					GPS_wflag = 0;
 					xQueueSendToBack(init_case_Queue, &QueueItem, portMAX_DELAY);
 					break;
 				}
 				if(sms_flag == 1)
 				{
+					GPS_wflag = 0;
 					xQueueSendToBack(init_case_Queue, &QueueItem, portMAX_DELAY);
 					break;
 				}
@@ -768,13 +872,22 @@ void test_task(void* taskparam)
 				if(GPS_chs == 50)
 				{
 					GPS_chs = 0;
+					GPS_wflag = 0;
 					xQueueSendToBack(GSM_case_Queue, &QueueItem, portMAX_DELAY);
 					break;
 				}
 				if(GPS_chs == 51)
 				{
 					GPS_chs = 0;
+					GPS_wflag = 0;
 					xQueueSendToBack(IO_case_Queue, &QueueItem, portMAX_DELAY);
+					break;
+				}
+				if(GPS_chs == 48)
+				{
+					GPS_chs = 0;
+					reset_flag = 1;
+					xQueueSendToBack(init_case_Queue, &QueueItem, portMAX_DELAY);
 					break;
 				}
 			}
@@ -791,10 +904,30 @@ void test_task(void* taskparam)
 			usart_serial_write_packet(UART0, "Press 6 to set receiver number\n\r", strlen("Press 6 to set receiver number\n\r"));
 			usart_serial_write_packet(UART0, "Press 7 to send sms to receiver\n\r", strlen("Press 7 to send sms to receiver\n\r"));
 			usart_serial_write_packet(UART0, "Press 8 to turn sequential position-sms ON/OFF \n\r", strlen("Press 8 to turn sequential position-sms ON/OFF \n\r"));
+			usart_serial_write_packet(UART0, "Press 0 to Reset to Init/Status Mode\n\r", strlen("Press 0 to Reset to Init/Status Mode\n\r"));
+			usart_serial_write_packet(UART_SERIAL0, "\n\rConfirm with Enter\n\r\n\r", strlen("\n\rConfirm with Enter\n\r\n\r"));
 			sms_flag = 0;
 			GSM_chs = 0;
 			while(1)
 			{
+				if(!ioport_get_pin_level(PIO_PD23_IDX))
+				{
+					pio_set_output(PIOB, PIO_PB13, LOW, DISABLE, DISABLE);
+				}
+				// Hvis GPS status-ON er høj. Tænd grøn diode
+				if(ioport_get_pin_level(PIO_PD24_IDX) && GPS_start_flag == 0)
+				{
+					pio_set_output(PIOD, PIO_PD29, HIGH, DISABLE, DISABLE);
+					usart_serial_write_packet(UART0, "GPS On\n\r", strlen("GPS On\n\r"));
+					vTaskDelay(1000 / portTICK_RATE_MS);
+					GPS_start_flag = 1;
+				} // Sluk grøn diode hvis status-ON er lav
+				if(!ioport_get_pin_level(PIO_PD24_IDX) && GPS_start_flag == 1)
+				{
+					pio_set_output(PIOD, PIO_PD29, LOW, DISABLE, DISABLE);
+					GPS_start_flag = 0;
+					usart_serial_write_packet(UART0, "GPS Off\n\r", strlen("GPS Off\n\r"));
+				}
 				if(sms_flag == 1)
 				{
 					xQueueSendToBack(init_case_Queue, &QueueItem, portMAX_DELAY);
@@ -900,6 +1033,13 @@ void test_task(void* taskparam)
 					GSM_seq_flag = 0;
 					usart_serial_write_packet(UART0, "Sequential position-sms OFF\n\r", strlen("Sequential position-sms OFF\n\r"));
 				}
+				if(GSM_chs == 48)
+				{
+					GSM_chs = 0;
+					reset_flag = 1;
+					xQueueSendToBack(init_case_Queue, &QueueItem, portMAX_DELAY);
+					break;
+				}
 			}
 			break;
 			
@@ -913,9 +1053,29 @@ void test_task(void* taskparam)
 			usart_serial_write_packet(UART0, "Press 5 to monitor IN3 ADC\n\r", strlen("Press 5 to monitor IN3 ADC\n\r"));
 			usart_serial_write_packet(UART0, "Press 6 to monitor IN4\n\r", strlen("Press 6 to monitor IN4\n\r"));
 			usart_serial_write_packet(UART0, "Press 7 to set OUT1 HIGH/LOW\n\r", strlen("Press 7 to set OUT1 HIGH/LOW\n\r"));
+			usart_serial_write_packet(UART0, "Press 0 to Reset to Init/Status Mode\n\r", strlen("Press 0 to Reset to Init/Status Mode\n\r"));
+			usart_serial_write_packet(UART_SERIAL0, "\n\rConfirm with Enter\n\r\n\r", strlen("\n\rConfirm with Enter\n\r\n\r"));
 			IO_chs = 0;
 			while(1)
 			{
+				if(!ioport_get_pin_level(PIO_PD23_IDX))
+				{
+					pio_set_output(PIOB, PIO_PB13, LOW, DISABLE, DISABLE);
+				}
+				// Hvis GPS status-ON er høj. Tænd grøn diode
+				if(ioport_get_pin_level(PIO_PD24_IDX) && GPS_start_flag == 0)
+				{
+					pio_set_output(PIOD, PIO_PD29, HIGH, DISABLE, DISABLE);
+					usart_serial_write_packet(UART0, "GPS On\n\r", strlen("GPS On\n\r"));
+					vTaskDelay(1000 / portTICK_RATE_MS);
+					GPS_start_flag = 1;
+				} // Sluk grøn diode hvis status-ON er lav
+				if(!ioport_get_pin_level(PIO_PD24_IDX) && GPS_start_flag == 1)
+				{
+					pio_set_output(PIOD, PIO_PD29, LOW, DISABLE, DISABLE);
+					GPS_start_flag = 0;
+					usart_serial_write_packet(UART0, "GPS Off\n\r", strlen("GPS Off\n\r"));
+				}
 				if(sms_flag == 1)
 				{
 					xQueueSendToBack(init_case_Queue, &QueueItem, portMAX_DELAY);
@@ -1021,6 +1181,13 @@ void test_task(void* taskparam)
 					pio_set_input(PIOD, PIO_PD30, PIO_DEFAULT);
 					IO_chs = 0;
 				}
+				if(IO_chs == 48)
+				{
+					reset_flag = 1;
+					IO_chs = 0;
+					xQueueSendToBack(init_case_Queue, &QueueItem, portMAX_DELAY);
+					break;
+				}
 			}
 			default:
 			break;
@@ -1059,6 +1226,28 @@ int main (void)
 	pio_set_output(PIOA, PIO_PA17, LOW, DISABLE, DISABLE);
 	////IN4 Counter
 	pio_set_output(PIOA, PIO_PA20, LOW, DISABLE, DISABLE);
+	
+	//Set up ADC
+	afec_enable(AFEC0);
+	afec_get_config_defaults(&afec0_cfgdef);
+	afec_ch_get_config_defaults(&afec0_chdef);
+	afec_ch_set_config(AFEC0, AFEC_CHANNEL_1, &afec0_chdef);
+	afec_ch_set_config(AFEC0, AFEC_CHANNEL_2, &afec0_chdef);
+	afec_ch_set_config(AFEC0, AFEC_CHANNEL_3, &afec0_chdef);
+	afec_ch_set_config(AFEC0, AFEC_CHANNEL_5, &afec0_chdef);
+	//Range 1-2
+	pio_set_output(PIOD, PIO_PD27, LOW, PIO_DEFAULT, PIO_DEFAULT);
+	afec_init(AFEC0, &afec0_cfgdef);
+	afec_set_trigger(AFEC0, AFEC_TRIG_SW);
+	afec_channel_set_analog_offset(AFEC0, AFEC_CHANNEL_2, 0x800);
+	afec_channel_set_analog_offset(AFEC0, AFEC_CHANNEL_5, 0x800);
+	afec_channel_set_analog_offset(AFEC0, AFEC_CHANNEL_3, 0x800);
+	afec_channel_set_analog_offset(AFEC0, AFEC_CHANNEL_0, 0x800);
+	afec_channel_set_analog_offset(AFEC0, AFEC_CHANNEL_1, 0x800);
+	afec_set_callback(AFEC0, AFEC_INTERRUPT_DATA_READY, adc0_callback, 1);
+	afec_channel_enable(AFEC0, AFEC_CHANNEL_2);
+	//Range 3-4
+	pio_set_output(PIOD, PIO_PD0, LOW, PIO_DEFAULT, PIO_DEFAULT);
 	
 	sysclk_enable_peripheral_clock(USART_SERIAL1_ID);
 	sysclk_enable_peripheral_clock(UART_SERIAL1_ID);
@@ -1135,26 +1324,7 @@ int main (void)
 	//CS ACC
 	pio_set_output(PIOA, PIO_PA11, LOW, PIO_DEFAULT, PIO_DEFAULT);
 	
-	//Set up ADC
-	afec_enable(AFEC0);
-	afec_get_config_defaults(&afec0_cfgdef);
-	afec_ch_get_config_defaults(&afec0_chdef);
-	afec_ch_set_config(AFEC0, AFEC_CHANNEL_1, &afec0_chdef);
-	afec_ch_set_config(AFEC0, AFEC_CHANNEL_2, &afec0_chdef);
-	afec_ch_set_config(AFEC0, AFEC_CHANNEL_3, &afec0_chdef);
-	afec_ch_set_config(AFEC0, AFEC_CHANNEL_5, &afec0_chdef);
-	//Range 1-2
-	pio_set_output(PIOD, PIO_PD27, LOW, PIO_DEFAULT, PIO_DEFAULT);
-	afec_init(AFEC0, &afec0_cfgdef);
-	afec_set_trigger(AFEC0, AFEC_TRIG_SW);
-	afec_channel_set_analog_offset(AFEC0, AFEC_CHANNEL_2, 0x800);
-	afec_channel_set_analog_offset(AFEC0, AFEC_CHANNEL_5, 0x800);
-	afec_channel_set_analog_offset(AFEC0, AFEC_CHANNEL_3, 0x800);
-	afec_channel_set_analog_offset(AFEC0, AFEC_CHANNEL_0, 0x800);
-	afec_channel_set_analog_offset(AFEC0, AFEC_CHANNEL_1, 0x800);
-	afec_set_callback(AFEC0, AFEC_INTERRUPT_DATA_READY, adc0_callback, 1);
-	//Range 3-4
-	pio_set_output(PIOD, PIO_PD0, LOW, PIO_DEFAULT, PIO_DEFAULT);
+	
 	
 	usart_serial_write_packet(UART0, "\033[2J", strlen("\033[2J"));
 	usart_serial_write_packet(UART0, "Initialising:\n\r\n\r", strlen("Initialising:\n\r\n\r"));
@@ -1282,8 +1452,8 @@ void adc0_callback(void)
 		{
 			VIN_ADC = afec_get_latest_value(AFEC0);
 			afec_channel_disable(AFEC0, AFEC_CHANNEL_5);
-			IO_VIN_CALC = ((VIN_ADC)*(5025))/1000;
-			SMS_Value.AD1 = (((IO_VIN_CALC * 34))/19700)+1;
+			IO_VIN_CALC = ((VIN_ADC)*(3191))/1000;
+			SMS_Value.AD1 = (((IO_VIN_CALC * 34)+9850)/19700);
 		}
 	}
 }
@@ -1376,14 +1546,14 @@ void vApplicationTickHook( void )
 		init_cnt++;
 	}
 	adc_cnt++;
+	ow_cnt++;
 	GSM_tick_cnt++;
 	GPS_tick_cnt++;
 	cnt1++;
 	if(GSM_seq_flag)
 	{
-	cnt2++;
+		cnt2++;
 	}
-	ow_cnt++;
 	if(init_cnt > 30000)
 	{
 		IO_cnt++;
@@ -1439,7 +1609,7 @@ void vApplicationTickHook( void )
 		}
 		ow_cnt = 0;
 	}
-	//Check inputs every second
+	//Check inputs every 3/4 second
 	if(IO_cnt == 750)
 	{
 		pio_set_input(PIOA, PIO_PA19, PIO_DEFAULT);
